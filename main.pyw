@@ -1,82 +1,164 @@
-from PySide2.QtCore import QObject,Signal
+from PySide2.QtCore import QObject,Signal,Qt,QCoreApplication
 from PySide2.QtGui import QIcon,QPixmap
-from PySide2.QtWidgets import QSystemTrayIcon,QApplication,QDialog,QMainWindow,QMessageBox
+from PySide2.QtWidgets import QSystemTrayIcon,QMessageBox,QApplication,QMainWindow,QAction,QMenu,QWidget,QGridLayout,QPlainTextEdit,QPushButton
 
-import os,sys,time,threading,ctypes
+import os,sys,time,threading,ctypes,re
 from base64 import b64decode
 
 
-FILE_DIR=os.path.dirname(os.path.abspath(sys.argv[0]))+'\\'
-PATH=FILE_DIR+'icons\\'
+LOAD_FROM_IMAGE=False
+
+PROGRAM_PATH = os.path.dirname(os.path.abspath(sys.argv[0]))+'\\'
+PATH         = PROGRAM_PATH+'icons\\'
 
 VK_CAPITAL = 0x14
 VK_HANGUL  = 0x15
 VK_NUMLOCK = 0x90
 
-class signal(QObject):
-    s=Signal(int)
 
-class Key(QDialog):
+class Info(QMainWindow):
+    def __init__(self,parent,title,info_text):
+        super().__init__(parent)
+        self.setupUI()
+        
+        self.retranslateUi(title,info_text)
+        self.btnExit.clicked.connect(self.hide)
+    
+    def setupUI(self):
+        if not self.objectName():
+            self.setObjectName(u"info")
+        self.setFixedSize(400, 300)
+        self.setWindowFlags(self.windowFlags()^Qt.WindowMinMaxButtonsHint)
+        
+        self.centralwidget = QWidget(self)
+        self.centralwidget.setObjectName(u"centralwidget")
+        
+        self.glCentral = QGridLayout(self.centralwidget)
+        self.glCentral.setObjectName(u"glCentral")
+        
+        self.pteInfo = QPlainTextEdit(self.centralwidget)
+        self.pteInfo.setObjectName(u"pteInfo")
+        self.pteInfo.setReadOnly(True)
+        self.glCentral.addWidget(self.pteInfo, 0, 0, 1, 1)
+
+        self.btnExit = QPushButton(self.centralwidget)
+        self.btnExit.setObjectName(u"btnExit")
+        self.glCentral.addWidget(self.btnExit, 1, 0, 1, 1, Qt.AlignRight)
+
+        self.setCentralWidget(self.centralwidget)
+    
+    def retranslateUi(self,title,info_text):
+        self.setWindowTitle(QCoreApplication.translate("info", title, None))
+        self.pteInfo.setPlainText(re.sub('\n +','\n',re.sub('\n{2,} *','\n\n',info_text)))
+        self.btnExit.setText(QCoreApplication.translate("info", u"\ub2eb\uae30", None))
+
+
+class CustomMessageBox(QMessageBox):
+    
+    btnClicked=Signal(bool)
+    
+    def __init__(self,parent,title,text,btns):
+        super().__init__(parent,title,text)
+        for btn in btns:
+            self.addButton(btn[0],btn[1])
+        
+        self.buttonClicked.connect(self.__emitter)
+    
+    def __emitter(self,btn):
+        btnRole=self.buttonRole(btn)
+        self.btnClicked.emit(btnRole==self.YesRole)
+
+
+class KeyUI:
+    def setupUI(self,key):
+        #generate icons
+        if LOAD_FROM_IMAGE:
+            img_n0='n0.png'
+            img_n1='n1.png'
+            img_n2='n2.png'
+            img_c0='c0.png'
+            img_c1='c1.png'
+            img_c2='c2.png'
+        else:
+            img_n0=QPixmap()
+            img_n1=QPixmap()
+            img_n2=QPixmap()
+            img_c0=QPixmap()
+            img_c1=QPixmap()
+            img_c2=QPixmap()
+            img_n0.loadFromData(b64decode(RAW_DATA['N0']))
+            img_n1.loadFromData(b64decode(RAW_DATA['N1']))
+            img_n2.loadFromData(b64decode(RAW_DATA['N2']))
+            img_c0.loadFromData(b64decode(RAW_DATA['C0']))
+            img_c1.loadFromData(b64decode(RAW_DATA['C1']))
+            img_c2.loadFromData(b64decode(RAW_DATA['C2']))
+        
+        self.num0=QIcon(img_n0)
+        self.num1=QIcon(img_n1)
+        self.num2=QIcon(img_n2)
+        self.caps0=QIcon(img_c0)
+        self.caps1=QIcon(img_c1)
+        self.caps2=QIcon(img_c2)
+        
+        #generate menu&actions
+        self.acLicense=QAction('License',key)
+        self.acInfo=QAction('Info',key)
+        self.acExit=QAction('Exit',key)
+        
+        self.menu=QMenu('menu')
+        self.menu.addAction(self.acLicense)
+        self.menu.addAction(self.acInfo)
+        self.menu.addSeparator()
+        self.menu.addAction(self.acExit)
+        
+        #generate tray icons
+        self.num=QSystemTrayIcon(self.num0,key)
+        self.caps=QSystemTrayIcon(self.num0,key)
+        
+        #set context menu
+        self.num.setContextMenu(self.menu)
+        self.caps.setContextMenu(self.menu)
+
+
+class Key(QWidget,KeyUI):
     def __init__(self):
-        def close(i):
-            print(self.__close_count)
-            self.__close_count+=1
-            if self.__close_count>1:
-                if QMessageBox.question(self,'Exit?','Are you want to exit?')==QMessageBox.Yes:
-                    self.__run=False
-                    while True:
-                        if self.__ended:
-                            sys.exit(0)
+        def close():
+            print('close')
+            self.__run=False
+            while True:
+                if self.__ended:
+                    sys.exit(0)
         
         super().__init__()
+        self.setupUI(self)
         
         self.__run         = True
         self.__ended       = False
         self.__close_count = 0
         self.__keydll      = ctypes.WinDLL('user32.dll')
         
-        #num lock icon & indicator
-        '''
-        img_n0=QPixmap()
-        img_n0.loadFromData(b64decode(RAW_DATA['N0']))
-        img_n1=QPixmap()
-        img_n1.loadFromData(b64decode(RAW_DATA['N1']))
-        img_n2=QPixmap()
-        img_n2.loadFromData(b64decode(RAW_DATA['N2']))
-        self.__num0=QIcon(img_n0)
-        self.__num1=QIcon(img_n1)
-        self.__num2=QIcon(img_n2)
-        '''
-        self.__num0=QIcon('n0.png')
-        self.__num1=QIcon('n1.png')
-        self.__num2=QIcon('n2.png')
+        #custom message box
+        msgbox=CustomMessageBox(self,'종료?','종료?',(('종료',QMessageBox.YesRole),('취소',QMessageBox.NoRole)))
         
-        self.__num=QSystemTrayIcon(self.__num0,self)
-        self.__num.activated.connect(close)
-        #self.__num.showMessage('Stop','test')
+        #license&open source info
+        if os.path.isfile(PROGRAM_PATH+'NOTICE'):
+            with open(PROGRAM_PATH+'NOTICE','r',encoding='utf-8') as file:
+                note_win=Info(self,'오픈 소스 라이선스',file.read())
+        else:
+            note_win=Info(self,'오픈 소스 라이선스','Notice File is Missed')
+
+        if os.path.isfile(PROGRAM_PATH+'LICENSE'):
+            with open(PROGRAM_PATH+'LICENSE','r',encoding='utf-8') as file:
+                info_win=Info(self,'정보',file.read())
+        else:
+            info_win=Info(self,'정보','License File is Missed')
         
-        #caps lock icon & indicator
-        '''
-        img_c0=QPixmap()
-        img_c0.loadFromData(b64decode(RAW_DATA['C0']))
-        img_c1=QPixmap()
-        img_c1.loadFromData(b64decode(RAW_DATA['C1']))
-        img_c2=QPixmap()
-        img_c2.loadFromData(b64decode(RAW_DATA['C2']))
-        self.__caps0=QIcon(img_c0)
-        self.__caps1=QIcon(img_c1)
-        self.__caps2=QIcon(img_c2)
-        '''
-        self.__caps0=QIcon('c0.png')
-        self.__caps1=QIcon('c1.png')
-        self.__caps2=QIcon('c2.png')
+        self.acLicense.triggered.connect(lambda: info_win.show())
+        self.acInfo.triggered.connect(lambda: note_win.show())
+        self.acExit.triggered.connect(close)
         
-        self.__caps=QSystemTrayIcon(self.__num0,self)
-        self.__caps.activated.connect(close)
-        
-        #show
-        self.__num.setVisible(True)
-        self.__caps.setVisible(True)
+        self.num.setVisible(True)
+        self.caps.setVisible(True)
         
         #get state
         threading.Thread(target=self.__worker).start()
@@ -103,18 +185,18 @@ class Key(QDialog):
     def __update(self,num,caps):
         print(num,';',caps)
         if num==0:
-            self.__num.setIcon(self.__num0)
+            self.num.setIcon(self.num0)
         elif num==1:
-            self.__num.setIcon(self.__num1)
+            self.num.setIcon(self.num1)
         else:
-            self.__num.setIcon(self.__num2)
+            self.num.setIcon(self.num2)
         
         if caps==0:
-            self.__caps.setIcon(self.__caps0)
+            self.caps.setIcon(self.caps0)
         elif caps==1:
-            self.__caps.setIcon(self.__caps1)
+            self.caps.setIcon(self.caps1)
         else:
-            self.__caps.setIcon(self.__caps2)
+            self.caps.setIcon(self.caps2)
 
 
 #icons
