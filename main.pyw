@@ -53,22 +53,6 @@ class Info(QMainWindow):
         self.btnExit.setText(QCoreApplication.translate("info", u"\ub2eb\uae30", None))
 
 
-class CustomMessageBox(QMessageBox):
-    
-    btnClicked=Signal(bool)
-    
-    def __init__(self,parent,title,text,btns):
-        super().__init__(parent,title,text)
-        for btn in btns:
-            self.addButton(btn[0],btn[1])
-        
-        self.buttonClicked.connect(self.__emitter)
-    
-    def __emitter(self,btn):
-        btnRole=self.buttonRole(btn)
-        self.btnClicked.emit(btnRole==self.YesRole)
-
-
 class KeyUI:
     def setupUI(self,key):
         #generate icons
@@ -136,9 +120,6 @@ class Key(QWidget,KeyUI):
         self.__ended       = False
         self.__close_count = 0
         self.__keydll      = ctypes.WinDLL('user32.dll')
-        
-        #custom message box
-        msgbox=CustomMessageBox(self,'종료?','종료?',(('종료',QMessageBox.YesRole),('취소',QMessageBox.NoRole)))
         
         #license&open source info
         if os.path.isfile(PROGRAM_PATH+'NOTICE'):
