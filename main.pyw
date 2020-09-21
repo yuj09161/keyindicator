@@ -1,7 +1,3 @@
-'''
-ToDo: 그림 파일 크기 줄이기(->Ram 사용량 감소)
-'''
-
 from PySide2.QtCore import QObject,Signal,Qt,QCoreApplication
 from PySide2.QtGui import QIcon,QPixmap
 from PySide2.QtWidgets import QSystemTrayIcon,QMessageBox,QApplication,QMainWindow,QAction,QMenu,QWidget,QGridLayout,QPlainTextEdit,QPushButton
@@ -13,20 +9,30 @@ from base64 import b64decode
 LOAD_FROM_IMAGE=False
 
 PROGRAM_PATH = os.path.dirname(os.path.abspath(sys.argv[0]))+'\\'
-ICON_PATH    = PROGRAM_PATH+'icons\\'
+PATH         = PROGRAM_PATH+'icons\\'
 
 VK_CAPITAL = 0x14
 VK_HANGUL  = 0x15
 VK_NUMLOCK = 0x90
 
 
+class MsgBox(QMessageBox):
+    def deleteLater():
+        self.destroy()
+
+
 class Info(QMainWindow):
-    def __init__(self,parent,title,info_text):
+    def __init__(self,parent,title,info_text,display_qtinfo=False):
+        self.__display_qtinfo=display_qtinfo
+        
         super().__init__(parent)
         self.setupUI()
         
         self.retranslateUi(title,info_text)
         self.btnExit.clicked.connect(self.hide)
+        
+        if self.__display_qtinfo:
+            self.btnQt.clicked.connect(lambda: QMessageBox.aboutQt(self))
     
     def setupUI(self):
         if not self.objectName():
@@ -43,11 +49,16 @@ class Info(QMainWindow):
         self.pteInfo = QPlainTextEdit(self.centralwidget)
         self.pteInfo.setObjectName(u"pteInfo")
         self.pteInfo.setReadOnly(True)
-        self.glCentral.addWidget(self.pteInfo, 0, 0, 1, 1)
+        self.glCentral.addWidget(self.pteInfo, 0, 0, 1, 2)
+
+        if self.__display_qtinfo:
+            self.btnQt = QPushButton(self.centralwidget)
+            self.btnQt.setObjectName(u"btnQt")
+            self.glCentral.addWidget(self.btnQt, 1, 0, 1, 1, Qt.AlignLeft)
 
         self.btnExit = QPushButton(self.centralwidget)
         self.btnExit.setObjectName(u"btnExit")
-        self.glCentral.addWidget(self.btnExit, 1, 0, 1, 1, Qt.AlignRight)
+        self.glCentral.addWidget(self.btnExit, 1, 1, 1, 1, Qt.AlignRight)
 
         self.setCentralWidget(self.centralwidget)
     
@@ -55,25 +66,27 @@ class Info(QMainWindow):
         self.setWindowTitle(QCoreApplication.translate("info", title, None))
         self.pteInfo.setPlainText(re.sub('\n +','\n',re.sub('\n{2,} *','\n\n',info_text)))
         self.btnExit.setText(QCoreApplication.translate("info", u"\ub2eb\uae30", None))
+        if self.__display_qtinfo:
+            self.btnQt.setText(QCoreApplication.translate("info", u"About Qt", None))
 
 
 class KeyUI:
     def setupUI(self,key):
         #generate icons
         if LOAD_FROM_IMAGE:
-            img_n0 = ICON_PATH+'n0.png'
-            img_n1 = ICON_PATH+'n1.png'
-            img_n2 = ICON_PATH+'n2.png'
-            img_c0 = ICON_PATH+'c0.png'
-            img_c1 = ICON_PATH+'c1.png'
-            img_c2 = ICON_PATH+'c2.png'
+            img_n0='n0.png'
+            img_n1='n1.png'
+            img_n2='n2.png'
+            img_c0='c0.png'
+            img_c1='c1.png'
+            img_c2='c2.png'
         else:
-            img_n0 = QPixmap()
-            img_n1 = QPixmap()
-            img_n2 = QPixmap()
-            img_c0 = QPixmap()
-            img_c1 = QPixmap()
-            img_c2 = QPixmap()
+            img_n0=QPixmap()
+            img_n1=QPixmap()
+            img_n2=QPixmap()
+            img_c0=QPixmap()
+            img_c1=QPixmap()
+            img_c2=QPixmap()
             img_n0.loadFromData(b64decode(RAW_DATA['n0']))
             img_n1.loadFromData(b64decode(RAW_DATA['n1']))
             img_n2.loadFromData(b64decode(RAW_DATA['n2']))
@@ -81,27 +94,27 @@ class KeyUI:
             img_c1.loadFromData(b64decode(RAW_DATA['c1']))
             img_c2.loadFromData(b64decode(RAW_DATA['c2']))
         
-        self.num0  = QIcon(img_n0)
-        self.num1  = QIcon(img_n1)
-        self.num2  = QIcon(img_n2)
-        self.caps0 = QIcon(img_c0)
-        self.caps1 = QIcon(img_c1)
-        self.caps2 = QIcon(img_c2)
+        self.num0=QIcon(img_n0)
+        self.num1=QIcon(img_n1)
+        self.num2=QIcon(img_n2)
+        self.caps0=QIcon(img_c0)
+        self.caps1=QIcon(img_c1)
+        self.caps2=QIcon(img_c2)
         
         #generate menu&actions
-        self.acLicense = QAction('License',key)
-        self.acInfo    = QAction('Info',key)
-        self.acExit    = QAction('Exit',key)
+        self.acInfo=QAction('Info',key)
+        self.acLicense=QAction('License',key)
+        self.acExit=QAction('Exit',key)
         
         self.menu=QMenu('menu')
-        self.menu.addAction(self.acLicense)
         self.menu.addAction(self.acInfo)
+        self.menu.addAction(self.acLicense)
         self.menu.addSeparator()
         self.menu.addAction(self.acExit)
         
         #generate tray icons
-        self.num  = QSystemTrayIcon(self.num0,key)
-        self.caps = QSystemTrayIcon(self.num0,key)
+        self.num=QSystemTrayIcon(self.num0,key)
+        self.caps=QSystemTrayIcon(self.caps0,key)
         
         #set context menu
         self.num.setContextMenu(self.menu)
@@ -111,10 +124,25 @@ class KeyUI:
 class Key(QWidget,KeyUI):
     def __init__(self):
         def close():
-            self.__run=False
-            while True:
-                if self.__ended:
-                    sys.exit(0)
+            def processer(response):
+                print(response)
+                response=msgbox.standardButton(response)
+                print(response)
+                msgbox.destroy()
+                if response==QMessageBox.Yes:
+                    self.__run=False
+                    while True:
+                        if self.__ended:
+                            sys.exit(0)
+                app.processEvents()
+            msgbox=MsgBox()
+            msgbox.setWindowTitle('종료?')
+            msgbox.setText('종료?')
+            msgbox.setIcon(QMessageBox.Question)
+            msgbox.addButton(QMessageBox.Yes)
+            msgbox.addButton(QMessageBox.No)
+            msgbox.show()
+            msgbox.buttonClicked.connect(processer)
         
         super().__init__()
         self.setupUI(self)
@@ -127,18 +155,18 @@ class Key(QWidget,KeyUI):
         #license&open source info
         if os.path.isfile(PROGRAM_PATH+'NOTICE'):
             with open(PROGRAM_PATH+'NOTICE','r',encoding='utf-8') as file:
-                note_win=Info(self,'오픈 소스 라이선스',file.read())
+                note_win=Info(self,'오픈 소스 라이선스',file.read(),True)
         else:
-            note_win=Info(self,'오픈 소스 라이선스','Notice File is Missed')
+            note_win=Info(self,'오픈 소스 라이선스','Notice File is Missed',True)
 
         if os.path.isfile(PROGRAM_PATH+'LICENSE'):
             with open(PROGRAM_PATH+'LICENSE','r',encoding='utf-8') as file:
-                info_win=Info(self,'정보',file.read())
+                license_win=Info(self,'정보',file.read())
         else:
-            info_win=Info(self,'정보','License File is Missed')
+            license_win=Info(self,'정보','License File is Missed')
         
-        self.acLicense.triggered.connect(lambda: info_win.show())
-        self.acInfo.triggered.connect(lambda: note_win.show())
+        self.acInfo.triggered.connect(note_win.show)
+        self.acLicense.triggered.connect(license_win.show)
         self.acExit.triggered.connect(close)
         
         self.num.setVisible(True)
@@ -157,7 +185,6 @@ class Key(QWidget,KeyUI):
             #get current state
             num  = self.__keydll.GetKeyState(VK_NUMLOCK)
             caps = self.__keydll.GetKeyState(VK_CAPITAL)
-            #kor  = self.__keydll.GetKeyState(VK_HANGUL)
             if num!=old_num or caps!=old_caps:
                 #if state changed
                 self.__update(num,caps)
